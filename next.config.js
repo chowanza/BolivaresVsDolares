@@ -1,8 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
-  // Optional: Change the output directory `out` -> `dist`
-  // distDir: 'dist',
+  // output: 'export', // Commented out to allow Vercel to handle the build natively
 }
 
 module.exports = nextConfig
