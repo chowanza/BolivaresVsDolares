@@ -3,20 +3,19 @@
 import React, { useState, useEffect } from 'react';
 import { useRates } from '@/context/RatesContext';
 import { IGTF_RATE } from '@/lib/constants';
-import { Calculator, RefreshCw, Settings2, Wallet, Banknote, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Calculator, RefreshCw, Settings2, Wallet, Banknote, ArrowRight, AlertCircle, CheckCircle2, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-type PaymentMethod = 'BS' | 'USD_CASH' | 'USDT';
 
 export const SmartCalculator = () => {
   const { BCV, USDT, CASH, isLoading, error } = useRates();
   const [price, setPrice] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('USDT');
   
   // Manual Rate State
   const [isManualRate, setIsManualRate] = useState(false);
   const [manualUsdtRate, setManualUsdtRate] = useState<string>('');
   const [manualBcvRate, setManualBcvRate] = useState<string>('');
+  const [promoPrice, setPromoPrice] = useState<string>('');
+  const [showPromoInput, setShowPromoInput] = useState(false);
 
   // Update manual rate when API rate loads initially
   useEffect(() => {
@@ -28,75 +27,43 @@ export const SmartCalculator = () => {
     }
   }, [USDT, BCV]);
 
-  const activeStreetRate = isManualRate && parseFloat(manualUsdtRate) > 0 
+  const activeUsdtRate = isManualRate && parseFloat(manualUsdtRate) > 0 
     ? parseFloat(manualUsdtRate) 
-    : (paymentMethod === 'USD_CASH' ? CASH : USDT);
+    : USDT;
   
+  const activeCashRate = isManualRate && parseFloat(manualUsdtRate) > 0 
+    ? parseFloat(manualUsdtRate) // Assuming manual rate applies to both for simplicity or add separate input
+    : CASH;
+
   const activeBCV = isManualRate && parseFloat(manualBcvRate) > 0
     ? parseFloat(manualBcvRate)
     : BCV;
     
   const priceValue = parseFloat(price) || 0;
+  const promoPriceValue = parseFloat(promoPrice) || 0;
   
-  // Logic
-  // Scenario: User sees a price on the shelf (usually in USD).
-  // We assume the input 'price' is the Shelf Price in USD.
-  
-  // 1. Pay with what I have (Direct)
-  const calculateDirectPay = () => {
-    if (paymentMethod === 'BS') {
-      // If I have Bs, I pay Price * BCV. No IGTF.
-      // Cost in USD terms? It's just the price.
-      return priceValue; 
-    }
-    
-    // If I have USD/USDT
-    // I pay Price + 3% IGTF
-    return priceValue * (1 + IGTF_RATE);
-  };
+  // Calculations
+  // 1. Cost in Bs (Official Price)
+  const costInBs = priceValue * activeBCV;
 
-  // 2. Smart Pay (Change USD to Bs, then pay in Bs)
-  const calculateSmartPay = () => {
-    // I need to pay Price (in USD) * BCV (in Bs/USD) = Total Bs needed
-    const priceInBs = priceValue * activeBCV;
-    
-    // USD needed to get those Bs = PriceInBs / StreetRate
-    return activeStreetRate > 0 ? priceInBs / activeStreetRate : 0;
-  };
+  // 2. Cost if paying with Cash (Exchange Cash -> Bs -> Pay)
+  // I need 'costInBs'. I sell my Cash at 'activeCashRate'.
+  // Dollars needed = costInBs / activeCashRate
+  const costIfExchangingCash = activeCashRate > 0 ? costInBs / activeCashRate : 0;
 
-  const directCost = calculateDirectPay();
-  const smartCost = calculateSmartPay();
-  const savings = directCost - smartCost;
-  const savingsPercent = directCost > 0 ? (savings / directCost) * 100 : 0;
+  // 3. Cost if paying with USDT (Exchange USDT -> Bs -> Pay)
+  // I need 'costInBs'. I sell my USDT at 'activeUsdtRate'.
+  // USDT needed = costInBs / activeUsdtRate
+  const costIfExchangingUsdt = activeUsdtRate > 0 ? costInBs / activeUsdtRate : 0;
 
-  // Recommendation Text
-  const getRecommendation = () => {
-    if (priceValue === 0) return null;
+  // 4. Direct Pay (Promo Divisa / No IGTF)
+  // If promoPrice is set, that is the cost.
+  const costDirectNoIgtf = promoPriceValue > 0 
+    ? promoPriceValue 
+    : priceValue;
 
-    if (paymentMethod === 'BS') {
-      return {
-        type: 'neutral',
-        title: 'Conversión de Bolívares',
-        text: 'Aquí puedes ver cuánto representan tus Bolívares en diferentes tasas de cambio.'
-      };
-    }
-
-    if (savings > 0) {
-      return {
-        type: 'warning',
-        title: '¡No pagues directo!',
-        text: `Si pagas directo pierdes dinero (IGTF + Tasa BCV). Mejor cambia tus $ a Bs (a tasa ${activeStreetRate.toFixed(2)}) y paga en Bolívares. Ahorrarás un ${savingsPercent.toFixed(1)}%.`
-      };
-    } else {
-      return {
-        type: 'neutral',
-        title: 'Da igual cómo pagues',
-        text: 'La brecha cambiaria es pequeña hoy. Puedes pagar directo si es más cómodo.'
-      };
-    }
-  };
-
-  const recommendation = getRecommendation();
+  // 5. Direct Pay (With IGTF)
+  const costDirectWithIgtf = priceValue * (1 + IGTF_RATE);
 
   if (isLoading) return null;
   
@@ -122,7 +89,7 @@ export const SmartCalculator = () => {
             <Calculator className="w-5 h-5" />
             <h2 className="font-semibold text-lg">Calculadora Inteligente</h2>
           </div>
-          <p className="text-blue-100 text-sm">¿Qué moneda tienes?</p>
+          <p className="text-blue-100 text-sm">Compara tus opciones de pago</p>
         </div>
         <button 
           onClick={() => setIsManualRate(!isManualRate)}
@@ -137,46 +104,7 @@ export const SmartCalculator = () => {
       </div>
 
       <div className="p-6 space-y-6">
-        {/* Payment Method Selection */}
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={() => setPaymentMethod('BS')}
-            className={cn(
-              "flex flex-col items-center justify-center p-3 rounded-xl border transition-all",
-              paymentMethod === 'BS'
-                ? "bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-                : "border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
-            )}
-          >
-            <Banknote className="w-6 h-6 mb-1" />
-            <span className="text-xs font-medium">Bolívares</span>
-          </button>
-          <button
-            onClick={() => setPaymentMethod('USD_CASH')}
-            className={cn(
-              "flex flex-col items-center justify-center p-3 rounded-xl border transition-all",
-              paymentMethod === 'USD_CASH'
-                ? "bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
-                : "border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
-            )}
-          >
-            <Wallet className="w-6 h-6 mb-1" />
-            <span className="text-xs font-medium">Efectivo $</span>
-          </button>
-          <button
-            onClick={() => setPaymentMethod('USDT')}
-            className={cn(
-              "flex flex-col items-center justify-center p-3 rounded-xl border transition-all",
-              paymentMethod === 'USDT'
-                ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-                : "border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800"
-            )}
-          >
-            <RefreshCw className="w-6 h-6 mb-1" />
-            <span className="text-xs font-medium">USDT</span>
-          </button>
-        </div>
-
+        
         {/* Manual Rate Input */}
         {isManualRate && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 animate-in slide-in-from-top-2">
@@ -185,34 +113,32 @@ export const SmartCalculator = () => {
               <label className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1 block">
                 Tasa BCV (Manual)
               </label>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-gray-500">Bs.</span>
+              <div className="flex items-center bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-blue-500">
+                <span className="text-sm font-bold text-gray-500 mr-2">Bs.</span>
                 <input
                   type="number"
                   value={manualBcvRate}
                   onChange={(e) => setManualBcvRate(e.target.value)}
-                  className="flex-1 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="flex-1 bg-transparent outline-none text-sm w-full"
                 />
               </div>
             </div>
 
             {/* Manual Street Rate */}
-            {paymentMethod !== 'BS' && (
-              <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl">
-                <label className="text-xs font-medium text-green-700 dark:text-green-300 mb-1 block">
-                  Tasa {paymentMethod === 'USDT' ? 'USDT' : 'Efectivo'} (Manual)
-                </label>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-gray-500">Bs.</span>
-                  <input
-                    type="number"
-                    value={manualUsdtRate}
-                    onChange={(e) => setManualUsdtRate(e.target.value)}
-                    className="flex-1 bg-white dark:bg-gray-800 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 outline-none"
-                  />
-                </div>
+            <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl">
+              <label className="text-xs font-medium text-green-700 dark:text-green-300 mb-1 block">
+                Tasa Paralela (Manual)
+              </label>
+              <div className="flex items-center bg-white dark:bg-gray-800 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-green-500">
+                <span className="text-sm font-bold text-gray-500 mr-2">Bs.</span>
+                <input
+                  type="number"
+                  value={manualUsdtRate}
+                  onChange={(e) => setManualUsdtRate(e.target.value)}
+                  className="flex-1 bg-transparent outline-none text-sm w-full"
+                />
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -220,122 +146,181 @@ export const SmartCalculator = () => {
         <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <div className="flex justify-between items-center mb-2">
             <label className="text-sm font-medium text-gray-600 dark:text-gray-300">
-              Monto a Pagar
+              ¿Cuánto te están cobrando? ($)
             </label>
           </div>
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">
-              {paymentMethod === 'BS' ? 'Bs' : '$'}
+              $
             </span>
             <input
               type="number"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              placeholder="0.00"
+              placeholder="Ej: 200"
               className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-lg"
             />
           </div>
+          {priceValue > 0 && (
+            <div className="mt-2 text-right text-xs text-gray-500">
+              Son Bs. {costInBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} a tasa BCV
+            </div>
+          )}
         </div>
 
-        {/* Results & Recommendation */}
+        {/* Promo Price Input (Optional Toggle) */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => setShowPromoInput(!showPromoInput)}
+            className="text-xs text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1 hover:underline"
+          >
+            <DollarSign className="w-3 h-3" />
+            {showPromoInput ? "Ocultar Promo Divisa" : "Agregar Promo Divisa (Oferta)"}
+          </button>
+        </div>
+
+        {showPromoInput && (
+          <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-2xl border border-blue-100 dark:border-blue-900/30 animate-in slide-in-from-top-2">
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-sm font-medium text-blue-800 dark:text-blue-300 flex items-center gap-2">
+                Precio Oferta en Divisas
+              </label>
+            </div>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400 font-bold text-xs">
+                $
+              </span>
+              <input
+                type="number"
+                value={promoPrice}
+                onChange={(e) => setPromoPrice(e.target.value)}
+                placeholder="Ej: 80 (Precio final si pagas en $)"
+                className="w-full pl-10 pr-4 py-2 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-800 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm"
+              />
+            </div>
+            <p className="text-[10px] text-blue-600/70 mt-1 ml-1">
+              Ingresa el monto total que te cobrarían si pagas directamente en dólares.
+            </p>
+          </div>
+        )}
+
+        {/* Results Scenarios */}
         {priceValue > 0 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             
-            {/* Recommendation Box */}
-            {recommendation && (
-              <div className={cn(
-                "p-4 rounded-xl border flex gap-3",
-                recommendation.type === 'success' ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:border-green-800 dark:text-green-200" :
-                recommendation.type === 'warning' ? "bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-200" :
-                "bg-gray-50 border-gray-200 text-gray-800"
-              )}>
-                {recommendation.type === 'success' ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertCircle className="w-5 h-5 shrink-0" />}
-                <div>
-                  <h3 className="font-bold text-sm mb-1">{recommendation.title}</h3>
-                  <p className="text-xs opacity-90 leading-relaxed">{recommendation.text}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Comparison */}
-            {paymentMethod === 'BS' ? (
-              <div className="space-y-3">
-                <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30">
-                  <div className="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">
-                    Equivalente en Dólares (BCV)
+            <div className="grid grid-cols-1 gap-3">
+              
+              {/* Option 1: Exchange Cash */}
+              <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/30 relative overflow-hidden">
+                <div className="relative z-10">
+                  <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <Wallet className="w-3 h-3" />
+                    Si cambias los dólares (Efectivo)
                   </div>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
-                        ${(priceValue / activeBCV).toFixed(2)}
-                      </div>
-                      <div className="text-xs text-blue-600/70">Tasa BCV: {activeBCV.toFixed(2)}</div>
+                  <div className="flex items-baseline justify-between">
+                    <div className="text-sm text-emerald-800 dark:text-emerald-200">
+                      Te sale en:
                     </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
-                      USDT
-                    </div>
-                    <div className="text-lg font-bold text-gray-900 dark:text-white">
-                      ${(priceValue / USDT).toFixed(2)}
-                    </div>
-                    <div className="text-xs text-gray-500">Tasa: {USDT.toFixed(2)}</div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
-                      Efectivo
-                    </div>
-                    <div className="text-lg font-bold text-gray-900 dark:text-white">
-                      ${(priceValue / CASH).toFixed(2)}
-                    </div>
-                    <div className="text-xs text-gray-500">Tasa: {CASH.toFixed(2)}</div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-3">
-                {/* Direct Pay */}
-                <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 flex justify-between items-center opacity-75">
-                  <div>
-                    <div className="text-xs font-medium text-red-600 dark:text-red-400 uppercase tracking-wider mb-1">
-                      Pago Directo
-                    </div>
-                    <div className="flex items-baseline gap-2">
-                      <div className="text-xl font-bold text-red-700 dark:text-red-300">
-                        ${directCost.toFixed(2)}
-                      </div>
-                      <div className="text-xs text-red-600/70">
-                        Bs. {(directCost * activeBCV).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Smart Pay */}
-                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/30 flex justify-between items-center relative overflow-hidden ring-2 ring-emerald-500 ring-offset-2 dark:ring-offset-gray-900">
-                  <div className="relative z-10">
-                    <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1 flex items-center gap-1">
-                      <RefreshCw className="w-3 h-3" />
-                      Smart Pay (Cambia a Bs)
-                    </div>
-                    <div className="flex items-baseline gap-2">
+                    <div className="text-right">
                       <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
-                        ${smartCost.toFixed(2)}
+                        ${costIfExchangingCash.toFixed(2)}
                       </div>
-                      <div className="text-sm font-medium text-emerald-600/70">
-                        Bs. {(smartCost * activeStreetRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })}
+                      <div className="text-[10px] font-medium text-emerald-600/80 flex flex-col items-end">
+                        <span>Bs. {costInBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} (Factura)</span>
+                        <span className="opacity-75">÷ {activeCashRate.toLocaleString('es-VE', { maximumFractionDigits: 2 })} (Tasa)</span>
                       </div>
                     </div>
-                    <div className="text-xs text-emerald-600 mt-1 font-medium">
-                      Ahorras ${savings.toFixed(2)} ({savingsPercent.toFixed(1)}%)
-                    </div>
+                  </div>
+                  <div className="text-xs text-emerald-600/70 mt-1 text-right">
+                    Ahorras ${(priceValue - costIfExchangingCash).toFixed(2)} vs pagar {priceValue}
                   </div>
                 </div>
               </div>
-            )}
+
+              {/* Option 2: Exchange USDT */}
+              <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-900/30 relative overflow-hidden">
+                <div className="relative z-10">
+                  <div className="text-xs font-bold text-green-600 dark:text-green-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <RefreshCw className="w-3 h-3" />
+                    Si cambias el USDT
+                  </div>
+                  <div className="flex items-baseline justify-between">
+                    <div className="text-sm text-green-800 dark:text-green-200">
+                      Te sale en:
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                        ${costIfExchangingUsdt.toFixed(2)}
+                      </div>
+                      <div className="text-[10px] font-medium text-green-600/80 flex flex-col items-end">
+                        <span>Bs. {costInBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} (Factura)</span>
+                        <span className="opacity-75">÷ {activeUsdtRate.toLocaleString('es-VE', { maximumFractionDigits: 2 })} (Tasa)</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-green-600/70 mt-1 text-right">
+                    Ahorras ${(priceValue - costIfExchangingUsdt).toFixed(2)} vs pagar {priceValue}
+                  </div>
+                </div>
+              </div>
+
+              {/* Option 3: Promo Divisa (Active) */}
+              {promoPriceValue > 0 && (
+                <div className="p-4 rounded-xl border relative overflow-hidden transition-all bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800">
+                  <div className="relative z-10">
+                    <div className="text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1 text-indigo-600 dark:text-indigo-400">
+                      <DollarSign className="w-3 h-3" />
+                      Promo Divisa (Oferta Especial)
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <div className="text-sm text-indigo-800 dark:text-indigo-200">
+                        Te sale en:
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">
+                          ${costDirectNoIgtf.toFixed(2)}
+                        </div>
+                        <div className="text-[10px] font-medium text-indigo-600/80 flex flex-col items-end">
+                          <span>Bs. {(costDirectNoIgtf * activeCashRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} (Equiv.)</span>
+                          <span className="opacity-75">Precio fijo ofertado</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-xs mt-1 text-right font-medium text-indigo-600/70">
+                      Ahorras ${(priceValue - costDirectNoIgtf).toFixed(2)} vs precio lista
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Option 4: Direct Pay with IGTF */}
+              <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/30 relative overflow-hidden opacity-75">
+                <div className="relative z-10">
+                  <div className="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    Pago directo común (+3% IGTF)
+                  </div>
+                  <div className="flex items-baseline justify-between">
+                    <div className="text-sm text-red-800 dark:text-red-200">
+                      Te sale en:
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-red-700 dark:text-red-300">
+                        ${costDirectWithIgtf.toFixed(2)}
+                      </div>
+                      <div className="text-[10px] font-medium text-red-600/80 flex flex-col items-end">
+                        <span>Bs. {(costDirectWithIgtf * activeCashRate).toLocaleString('es-VE', { maximumFractionDigits: 2 })} (Equiv.)</span>
+                        <span className="opacity-75">${priceValue} + 3% IGTF</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-red-600/70 mt-1 text-right">
+                    La opción más costosa
+                  </div>
+                </div>
+              </div>
+
+            </div>
           </div>
         )}
       </div>
