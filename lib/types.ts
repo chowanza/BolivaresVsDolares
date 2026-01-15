@@ -15,4 +15,6 @@ export interface RatesData {
   lastUpdated: string;
   isLoading: boolean;
   error: string | null;
+  // Indica si hay datos históricos disponibles en `public/rates_history.json`
+  historyAvailable?: boolean;
 }

@@ -11,6 +11,7 @@ const RatesContext = createContext<RatesData>({
   lastUpdated: '',
   isLoading: true,
   error: null,
+  historyAvailable: false,
 });
 
 export const useRates = () => useContext(RatesContext);
@@ -24,6 +25,7 @@ export const RatesProvider = ({ children }: { children: React.ReactNode }) => {
     lastUpdated: '',
     isLoading: true,
     error: null,
+    historyAvailable: false,
   });
 
   const fetchRates = async () => {
@@ -77,6 +79,19 @@ export const RatesProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     fetchRates();
+    // Check if history file exists and has data
+    const fetchHistoryFlag = async () => {
+      try {
+        const res = await fetch('/rates_history.json');
+        if (!res.ok) throw new Error('No history');
+        const data = await res.json();
+        const has = Array.isArray(data) && data.length > 0;
+        setRates(prev => ({ ...prev, historyAvailable: has }));
+      } catch (e) {
+        setRates(prev => ({ ...prev, historyAvailable: false }));
+      }
+    };
+    fetchHistoryFlag();
     // Refresh every 5 minutes
     const interval = setInterval(fetchRates, 5 * 60 * 1000);
     return () => clearInterval(interval);

@@ -3,6 +3,16 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRates } from '@/context/RatesContext';
+// Banner de fallback de histórico
+function HistoryFallbackBanner() {
+  const { historyAvailable } = useRates();
+  if (historyAvailable) return null;
+  return (
+    <div className="mb-4 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-200 text-sm">
+      Datos históricos no disponibles — mostrando últimas 24h como fallback.
+    </div>
+  );
+}
 import { ArrowLeft, TrendingDown, TrendingUp } from 'lucide-react';
 import { RatesChart } from '@/components/RatesChart';
 import { format } from 'date-fns';
@@ -57,6 +67,7 @@ export default function HistoricoPage() {
 
   return (
     <main className="max-w-md mx-auto min-h-screen p-4 pb-20">
+      <HistoryFallbackBanner />
       
       {/* Header Back Button */}
       <div className="mb-4">

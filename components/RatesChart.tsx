@@ -32,7 +32,7 @@ export const RatesChart = () => {
 
   // Generate Chart Data
   const chartData = useMemo(() => {
-    if (BCV === 0 || USDT === 0 || historicalData.length === 0) return [];
+    if (BCV === 0 || USDT === 0) return [];
 
     const now = new Date();
     
@@ -52,15 +52,31 @@ export const RatesChart = () => {
 
     if (timeRange === 'YEAR') {
         // Filter from history for the selected year
-        const filtered = historicalData.filter(d => {
-            const year = new Date(d.timestamp).getFullYear();
-            return year === selectedYear;
-        });
-        // If viewing current year, append the live point so stats are correct
-        if (selectedYear === now.getFullYear()) {
-            return [...filtered, currentPoint].sort((a, b) => a.timestamp - b.timestamp);
+      const filtered = historicalData.filter(d => {
+        const year = new Date(d.timestamp).getFullYear();
+        return year === selectedYear;
+      });
+      // If no historical data, fall back to simulated 24H points
+      if (historicalData.length === 0) {
+        // simulate last 24h
+        const durationMs = 24 * 60 * 60 * 1000;
+        const totalPoints = 24;
+        const startTime = now.getTime() - durationMs;
+        const points: ChartDataPoint[] = [];
+        for (let i = 0; i <= totalPoints; i++) {
+          const t = i / totalPoints;
+          const timestamp = startTime + (t * durationMs);
+          const bcvVal = BCV;
+          const parallelVal = USDT;
+          points.push({ date: new Date(timestamp).toISOString(), timestamp, bcv: bcvVal, parallel: parallelVal });
         }
-        return filtered;
+        return points;
+      }
+      // If viewing current year, append the live point so stats are correct
+      if (selectedYear === now.getFullYear()) {
+        return [...filtered, currentPoint].sort((a, b) => a.timestamp - b.timestamp);
+      }
+      return filtered;
     }
     
     if (['7D', '1M', '1Y'].includes(timeRange)) {
@@ -69,13 +85,27 @@ export const RatesChart = () => {
         if (timeRange === '1M') cutoffDate = subMonths(now, 1);
         if (timeRange === '1Y') cutoffDate = subYears(now, 1);
 
-        // Filter: After cutoff AND Before Now
-        const filtered = historicalData.filter(d => 
-            d.timestamp >= cutoffDate.getTime() && 
-            d.timestamp <= now.getTime()
-        );
-        // Append current live point
-        return [...filtered, currentPoint];
+      // If no historical data, fall back to simulated 24H points
+      if (historicalData.length === 0) {
+        const durationMs = 24 * 60 * 60 * 1000;
+        const totalPoints = 24;
+        const startTime = now.getTime() - durationMs;
+        const points: ChartDataPoint[] = [];
+        for (let i = 0; i <= totalPoints; i++) {
+          const t = i / totalPoints;
+          const timestamp = startTime + (t * durationMs);
+          points.push({ date: new Date(timestamp).toISOString(), timestamp, bcv: BCV, parallel: USDT });
+        }
+        return points;
+      }
+
+      // Filter: After cutoff AND Before Now
+      const filtered = historicalData.filter(d => 
+        d.timestamp >= cutoffDate.getTime() && 
+        d.timestamp <= now.getTime()
+      );
+      // Append current live point
+      return [...filtered, currentPoint];
     }
 
 
@@ -89,7 +119,7 @@ export const RatesChart = () => {
         
         // Improve start point estimation by interpolating
         // If we have a gap between last history and now, we shouldn't just use the old value
-        const lastHistory = historicalData[historicalData.length - 1];
+        const lastHistory = historicalData.length ? historicalData[historicalData.length - 1] : undefined;
         
         let startBcv = BCV;
         let startParallel = USDT;

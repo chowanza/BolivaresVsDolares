@@ -9,6 +9,7 @@ import { useRates } from "@/context/RatesContext";
 export default function Home() {
   const { lastUpdated } = useRates();
 
+
   return (
     <main className="max-w-md mx-auto min-h-screen p-4 pb-20">
       {/* Header */}
