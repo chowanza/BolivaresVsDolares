@@ -2,7 +2,8 @@
 
 import { RateDashboard } from "@/components/RateDashboard";
 import { SmartCalculator } from "@/components/SmartCalculator";
-import { Wallet } from "lucide-react";
+import { Wallet, LineChart } from "lucide-react";
+import Link from "next/link";
 import { useRates } from "@/context/RatesContext";
 
 export default function Home() {
@@ -18,7 +19,7 @@ export default function Home() {
           </div>
           <div>
             <h1 className="font-bold text-xl text-gray-900 dark:text-white">
-              VZLA SMART PAY
+              Bs Vs USD
             </h1>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               CUIDA TU DINERO
@@ -29,6 +30,24 @@ export default function Home() {
 
       {/* Dashboard */}
       <RateDashboard />
+
+      {/* Navigation to History */}
+      <Link href="/historico" className="block mb-6">
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors group">
+            <div className="flex items-center gap-3">
+                <div className="bg-blue-100 dark:bg-blue-900/40 p-2 rounded-lg text-blue-600 dark:text-blue-400">
+                    <LineChart className="w-5 h-5" />
+                </div>
+                <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white text-sm">Ver Gráfica Histórica</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Analiza la tendencia del mercado</p>
+                </div>
+            </div>
+            <div className="text-gray-400 group-hover:translate-x-1 transition-transform">
+                →
+            </div>
+        </div>
+      </Link>
 
       {/* Calculator */}
       <SmartCalculator />

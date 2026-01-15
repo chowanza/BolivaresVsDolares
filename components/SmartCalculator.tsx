@@ -3,12 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { useRates } from '@/context/RatesContext';
 import { IGTF_RATE } from '@/lib/constants';
-import { Calculator, RefreshCw, Settings2, Wallet, Banknote, ArrowRight, AlertCircle, CheckCircle2, DollarSign } from 'lucide-react';
+import { Calculator, RefreshCw, Settings2, Wallet, Banknote, ArrowRight, AlertCircle, CheckCircle2, DollarSign, ArrowLeftRight, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export const SmartCalculator = () => {
   const { BCV, USDT, CASH, isLoading, error } = useRates();
   const [price, setPrice] = useState<string>('');
+  const [currencyMode, setCurrencyMode] = useState<'USD' | 'VES'>('USD');
   
   // Manual Rate State
   const [isManualRate, setIsManualRate] = useState(false);
@@ -42,30 +43,43 @@ export const SmartCalculator = () => {
   const priceValue = parseFloat(price) || 0;
   const promoPriceValue = parseFloat(promoPrice) || 0;
   
-  // Calculations
+  // --- CALCULATIONS ---
+
+  // MODE: USD (Input is in $)
+  // -------------------------
   // 1. Cost in Bs (Official Price)
-  const costInBs = priceValue * activeBCV;
+  const costInBs_USD = priceValue * activeBCV;
+  // Alias for compatibility with existing render code until updated
+  const costInBs = costInBs_USD;
 
   // 2. Cost if paying with Cash (Exchange Cash -> Bs -> Pay)
-  // I need 'costInBs'. I sell my Cash at 'activeCashRate'.
-  // Dollars needed = costInBs / activeCashRate
-  const costIfExchangingCash = activeCashRate > 0 ? costInBs / activeCashRate : 0;
+  const costIfExchangingCash = activeCashRate > 0 ? costInBs_USD / activeCashRate : 0;
 
   // 3. Cost if paying with USDT (Exchange USDT -> Bs -> Pay)
-  // I need 'costInBs'. I sell my USDT at 'activeUsdtRate'.
-  // USDT needed = costInBs / activeUsdtRate
-  const costIfExchangingUsdt = activeUsdtRate > 0 ? costInBs / activeUsdtRate : 0;
+  const costIfExchangingUsdt = activeUsdtRate > 0 ? costInBs_USD / activeUsdtRate : 0;
 
   // 4. Direct Pay (Promo Divisa / No IGTF)
-  // If promoPrice is set, that is the cost.
-  const costDirectNoIgtf = promoPriceValue > 0 
-    ? promoPriceValue 
-    : priceValue;
-
+  const costDirectNoIgtf = promoPriceValue > 0 ? promoPriceValue : priceValue;
+  
   // 5. Direct Pay (With IGTF)
   const costDirectWithIgtf = priceValue * (1 + IGTF_RATE);
 
+  // MODE: VES (Input is in Bs.)
+  // -------------------------
+  // 1. Equivalent in USD at BCV
+  const usdAtBcv = activeBCV > 0 ? priceValue / activeBCV : 0;
+  
+  // 2. Equivalent in USD at Parallel
+  const usdAtParallel = activeUsdtRate > 0 ? priceValue / activeUsdtRate : 0;
+
   if (isLoading) return null;
+
+  const toggleMode = () => {
+    setCurrencyMode(prev => prev === 'USD' ? 'VES' : 'USD');
+    setPrice(''); // Reset price for clarity
+    setPromoPrice('');
+    setShowPromoInput(false);
+  };
   
   if (error || BCV === 0 || USDT === 0) {
     return (
@@ -87,20 +101,32 @@ export const SmartCalculator = () => {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Calculator className="w-5 h-5" />
-            <h2 className="font-semibold text-lg">Calculadora Inteligente</h2>
+            <h2 className="font-semibold text-lg">Calculadora</h2>
           </div>
-          <p className="text-blue-100 text-sm">Compara tus opciones de pago</p>
+          <p className="text-blue-100 text-sm">
+            {currencyMode === 'USD' ? 'Dólares a Bolívares' : 'Bolívares a Dólares'}
+          </p>
         </div>
-        <button 
-          onClick={() => setIsManualRate(!isManualRate)}
-          className={cn(
-            "p-2 rounded-lg transition-colors",
-            isManualRate ? "bg-white/20 text-white" : "text-blue-100 hover:bg-white/10"
-          )}
-          title="Ajustar Tasa"
-        >
-          <Settings2 className="w-5 h-5" />
-        </button>
+        <div className="flex gap-2">
+            <button 
+                onClick={toggleMode}
+                className="p-2 rounded-lg bg-white/20 text-white hover:bg-white/30 transition-colors flex items-center gap-2"
+                title="Cambiar Moneda"
+            >
+                <span className="text-xs font-bold">{currencyMode === 'USD' ? 'USD' : 'Bs.'}</span>
+                <ArrowLeftRight className="w-4 h-4" />
+            </button>
+            <button 
+                onClick={() => setIsManualRate(!isManualRate)}
+                className={cn(
+                    "p-2 rounded-lg transition-colors",
+                    isManualRate ? "bg-white/20 text-white" : "text-blue-100 hover:bg-white/10"
+                )}
+                title="Ajustar Tasa"
+            >
+            <Settings2 className="w-5 h-5" />
+            </button>
+        </div>
       </div>
 
       <div className="p-6 space-y-6">
@@ -146,29 +172,31 @@ export const SmartCalculator = () => {
         <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
           <div className="flex justify-between items-center mb-2">
             <label className="text-sm font-medium text-gray-600 dark:text-gray-300">
-              ¿Cuánto te están cobrando? ($)
+              {currencyMode === 'USD' ? '¿Cuánto te están cobrando? ($)' : 'Monto en Bolívares (Bs.)'}
             </label>
           </div>
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">
-              $
+              {currencyMode === 'USD' ? '$' : 'Bs.'}
             </span>
             <input
               type="number"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              placeholder="Ej: 200"
+              placeholder={currencyMode === 'USD' ? "Ej: 20" : "Ej: 1000"}
               className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-lg"
             />
           </div>
-          {priceValue > 0 && (
+          {priceValue > 0 && currencyMode === 'USD' && (
             <div className="mt-2 text-right text-xs text-gray-500">
               Son Bs. {costInBs.toLocaleString('es-VE', { maximumFractionDigits: 2 })} a tasa BCV
             </div>
           )}
         </div>
 
-        {/* Promo Price Input (Optional Toggle) */}
+        {/* USD MODE: Promo Price (Only available in USD mode) */}
+        {currencyMode === 'USD' && (
+         <>
         <div className="flex justify-end">
           <button
             onClick={() => setShowPromoInput(!showPromoInput)}
@@ -203,9 +231,11 @@ export const SmartCalculator = () => {
             </p>
           </div>
         )}
+        </>
+        )}
 
         {/* Results Scenarios */}
-        {priceValue > 0 && (
+        {priceValue > 0 && currencyMode === 'USD' && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             
             <div className="grid grid-cols-1 gap-3">
@@ -322,6 +352,56 @@ export const SmartCalculator = () => {
 
             </div>
           </div>
+        )}
+
+        {/* --- RESULTS SCENARIOS (VES MODE) --- */}
+        {priceValue > 0 && currencyMode === 'VES' && (
+            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                 <div className="grid grid-cols-1 gap-3">
+                    {/* Tasa BCV */}
+                    <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30">
+                         <div className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                            <Banknote className="w-3 h-3" />
+                            A Tasa BCV (Oficial)
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                            <div className="text-sm text-blue-800 dark:text-blue-200">
+                                Son:
+                            </div>
+                            <div className="text-right">
+                                <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                                    ${usdAtBcv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                                <div className="text-[10px] font-medium text-blue-600/80">
+                                    Divide entre {activeBCV.toLocaleString('es-VE', { maximumFractionDigits: 2 })}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                     {/* Tasa Paralela */}
+                     <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                         <div className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3" />
+                            A Tasa Paralela
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                            <div className="text-sm text-gray-800 dark:text-gray-200">
+                                Son:
+                            </div>
+                            <div className="text-right">
+                                <div className="text-2xl font-bold text-gray-700 dark:text-gray-300">
+                                    ${usdAtParallel.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                                <div className="text-[10px] font-medium text-gray-600/80">
+                                    Divide entre {activeUsdtRate.toLocaleString('es-VE', { maximumFractionDigits: 2 })}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                 </div>
+            </div>
         )}
       </div>
     </div>
